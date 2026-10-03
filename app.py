@@ -1,8 +1,10 @@
 import hashlib
 import json
 import logging
+import re
 from copy import deepcopy
 from time import perf_counter
+from urllib.parse import unquote
 
 import streamlit as st
 from openai import APIConnectionError, APITimeoutError, AuthenticationError, NotFoundError, PermissionDeniedError, RateLimitError
@@ -468,7 +470,17 @@ def save_configuration(rubric_text, prompts):
 def render_tutorial():
     tutorial = run_action(lambda: (core.BASE_DIR / "user_tutorial.md").read_text(encoding="utf-8"), "The tutorial could not be opened. Please reopen this page or contact the app owner.")
     if tutorial is not None:
-        st.markdown(tutorial)
+        first_image = True
+        for section in re.split(r"(!\[[^\]]*\]\([^)]+\))", tutorial):
+            image = re.fullmatch(r"!\[([^\]]*)\]\(([^)]+)\)", section)
+            if image:
+                caption, source = image.groups()
+                image_path = core.BASE_DIR / unquote(source)
+                with st.expander(f"Screenshot: {caption}", expanded=first_image):
+                    run_action(lambda: st.image(str(image_path), caption=caption, width="stretch"), "This screenshot could not be opened. The written instructions are still available.")
+                first_image = False
+            elif section.strip():
+                st.markdown(section)
 
 
 def main():

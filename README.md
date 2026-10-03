@@ -38,7 +38,7 @@ The Streamlit default model is `gpt-5.6-luna`. The **Settings** page offers GPT-
 - **Rubrics:** Edit the six dimensions, their 0–3 scoring anchors, and illustrative blocking rules. **Save rubric** writes `rubric.json`.
 - **Prompts:** Edit intake, assessment, or comparison instructions separately. Each save writes its corresponding Markdown file in `prompts/`.
 - **Settings:** Choose and save the model for subsequent AI requests. Existing assessment reports keep their original model.
-- **User Tutorial:** A first-time walkthrough of chat intake, the four toolbar icons, assessments, corrections, retries, and copying the conversation. The content is in `user_tutorial.md`; opening this page makes no AI call.
+- **User Tutorial:** A first-time walkthrough of chat intake, the four toolbar icons, assessments, corrections, retries, and copying the conversation, illustrated with 12 expandable screenshots. The content is in `user_tutorial.md`; opening this page makes no AI call.
 
 Intake automatically switches to **ASSESSMENT MODE** when the model considers the request sufficiently described and Python confirms that no material field, follow-up question, or reported contradiction remains unresolved. The transition is visible in the chat, then the app opens the same assessment modal used by the assessment icon. A complete high-risk proposal can proceed to assessment; completeness does not mean approval. There is no separate assessment page or final-approval action. Navigation uses `st.Page` and `st.navigation`, so only the selected page runs.
 
@@ -71,6 +71,7 @@ The highest known dimension score determines risk. Explicit blockers override th
 | `prompts/assessment.md` | Dimension findings, evidence, and blocker instructions |
 | `prompts/comparison.md` | Similarity and precedent instructions |
 | `user_tutorial.md` | Plain-language guide shown on the final navigation page |
+| `screenshots/*.png` | Original app screenshots displayed alongside the corresponding tutorial steps |
 | `precedents/*.md` | Six fictional historical requests, decisions, reasons, and conditions |
 | `evaluation_cases.json` | Existing synthetic requests for future manual evaluation |
 | `colab_starter.ipynb` | Existing notebook; its workflow has not been updated yet |
