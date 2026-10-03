@@ -5,7 +5,7 @@ from copy import deepcopy
 from time import perf_counter
 
 import streamlit as st
-from openai import APIConnectionError, APITimeoutError, AuthenticationError, PermissionDeniedError, RateLimitError
+from openai import APIConnectionError, APITimeoutError, AuthenticationError, NotFoundError, PermissionDeniedError, RateLimitError
 
 import core
 import workflow
@@ -44,6 +44,8 @@ def failure_message(error, fallback):
         return "The AI service could not accept the configured API key. Update it in Streamlit secrets, then retry."
     if isinstance(error, PermissionDeniedError):
         return "The configured API project cannot use this model. Choose another model in Settings, then retry."
+    if isinstance(error, NotFoundError):
+        return "The selected model could not be found or is unavailable to this API project. Choose another model in Settings, then retry."
     if isinstance(error, RateLimitError):
         return "The AI service is currently at its usage limit. Check your API quota or try again later."
     if isinstance(error, APITimeoutError):

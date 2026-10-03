@@ -82,7 +82,7 @@ def load_settings():
     if not isinstance(settings, dict):
         settings = {}
     model = settings.get("model", model)
-    return {"model": model if model in MODELS else DEFAULT_MODEL}
+    return {"model": model if isinstance(model, str) and model in MODELS else DEFAULT_MODEL}
 
 
 def load_configuration():
@@ -106,6 +106,8 @@ def validate_configuration(configuration):
 
 
 def load_precedents():
+    if not PRECEDENTS_DIR.is_dir():
+        raise FileNotFoundError("The precedents directory is unavailable.")
     precedents = []
     for path in sorted(PRECEDENTS_DIR.glob("*.md")):
         content = path.read_text(encoding="utf-8")
