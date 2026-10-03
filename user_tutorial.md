@@ -2,7 +2,7 @@
 
 Describe one intended use of AI, answer a few questions, and review an advisory risk assessment. The assistant helps you identify risks and missing information. Final decisions remain with your human reviewers; the starter rubric is illustrative.
 
-The screenshots follow one example conversation. Your questions and scores will depend on your answers. Expand a screenshot to see the relevant screen; the first one is open for you.
+The screenshots follow one example conversation. Your questions and scores will depend on your answers. Every screenshot is open by default inside a bordered frame. You can collapse a screenshot if you want to skim the instructions.
 
 ## 1. Start a conversation
 
