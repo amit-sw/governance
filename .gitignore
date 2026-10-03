@@ -13,6 +13,8 @@ htmlcov/
 .ipynb_checkpoints/
 data/
 colab-history.json
+transcript.txt
+colab_starter.ipynb
 governance-configuration.json
 governance-history.json
 case-*.json
