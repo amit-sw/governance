@@ -31,13 +31,14 @@ Open [localhost:8501](http://localhost:8501), or the local URL printed by Stream
 
 The Streamlit default model is `gpt-5.6-luna`. The **Settings** page offers GPT-6.1-Sol, GPT-5.6-Terra, and GPT-5.6-Luna. Save the selected model to apply it to subsequent intake, assessment, and comparison calls. Settings are saved in `data/settings.json` and survive restarts; the selected model takes precedence over `OPENAI_MODEL`. Before settings are saved, a supported `OPENAI_MODEL` value supplies the default. Model availability depends on the API project. Browsing precedents and editing configuration do not need an API key.
 
-## Use the five pages
+## Use the six pages
 
 - **Guided Intake:** Describe one use case in the enclosed chat, with scrollable messages and the input at the bottom. The assistant summarizes the supplied facts and asks four or five focused questions together when several facts are missing, with fewer questions when little remains. Useful questions offer labeled choices plus Other and Unknown. Correct facts by sending another message; select **Show current request** to inspect the structured facts in a dismissible modal. Unknown answers remain unanswered.
 - **History & Precedents:** Read the Markdown files describing earlier requests, fictional recorded human outcomes, reasons, and conditions. Six examples include low-risk use, conditional approval, policy blockers, employment impact, and incomplete information. Two customer-email cases illustrate different outcomes for similar purposes with different vendor controls.
 - **Rubrics:** Edit the six dimensions, their 0–3 scoring anchors, and illustrative blocking rules. **Save rubric** writes `rubric.json`.
 - **Prompts:** Edit intake, assessment, or comparison instructions separately. Each save writes its corresponding Markdown file in `prompts/`.
 - **Settings:** Choose and save the model for subsequent AI requests. Existing assessment reports keep their original model.
+- **User Tutorial:** A first-time walkthrough of chat intake, the four toolbar icons, assessments, corrections, retries, and copying the conversation. The content is in `user_tutorial.md`; opening this page makes no AI call.
 
 Intake automatically switches to **ASSESSMENT MODE** when the model considers the request sufficiently described and Python confirms that no material field, follow-up question, or reported contradiction remains unresolved. The transition is visible in the chat, then the app opens the same assessment modal used by the assessment icon. A complete high-risk proposal can proceed to assessment; completeness does not mean approval. There is no separate assessment page or final-approval action. Navigation uses `st.Page` and `st.navigation`, so only the selected page runs.
 
@@ -69,6 +70,7 @@ The highest known dimension score determines risk. Explicit blockers override th
 | `prompts/intake.md` | Guided conversation and readiness instructions |
 | `prompts/assessment.md` | Dimension findings, evidence, and blocker instructions |
 | `prompts/comparison.md` | Similarity and precedent instructions |
+| `user_tutorial.md` | Plain-language guide shown on the final navigation page |
 | `precedents/*.md` | Six fictional historical requests, decisions, reasons, and conditions |
 | `evaluation_cases.json` | Existing synthetic requests for future manual evaluation |
 | `colab_starter.ipynb` | Existing notebook; its workflow has not been updated yet |

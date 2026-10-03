@@ -465,6 +465,12 @@ def save_configuration(rubric_text, prompts):
     return True
 
 
+def render_tutorial():
+    tutorial = run_action(lambda: (core.BASE_DIR / "user_tutorial.md").read_text(encoding="utf-8"), "The tutorial could not be opened. Please reopen this page or contact the app owner.")
+    if tutorial is not None:
+        st.markdown(tutorial)
+
+
 def main():
     st.set_page_config(page_title="AI Governance Assistant", page_icon="◈", layout="wide")
     state = initialize_session()
@@ -479,6 +485,7 @@ def main():
         st.Page(lambda: render_rubrics(configuration), title="Rubrics", url_path="rubrics"),
         st.Page(lambda: render_prompts(configuration), title="Prompts", url_path="prompts"),
         st.Page(render_settings, title="Settings", url_path="settings"),
+        st.Page(render_tutorial, title="User Tutorial", url_path="tutorial"),
     ]
     page = st.navigation(pages, position="top")
     run_action(page.run, "This page could not finish displaying. Your conversation is preserved. Reopen the page, or use Conversation so far to copy your messages.")
