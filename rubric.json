@@ -1,0 +1,85 @@
+{
+  "name": "Illustrative AI governance starter",
+  "version": "0.1",
+  "note": "Synthetic sandbox only. These examples are not company policy or legal advice. Revise the rubric and prompts with Ralph and Jeremy before any operational use.",
+  "dimensions": [
+    {
+      "id": "D1",
+      "label": "Data confidentiality and privacy",
+      "guidance": "Consider the sensitivity of the inputs and outputs, not just the name of the tool. Personal, confidential, privileged, or proprietary data increases exposure. Do not infer a data classification or permission that the request does not state.",
+      "anchors": [
+        "Entirely public or synthetic material, with no personal or confidential information.",
+        "Routine internal non-sensitive information, with expressly stated appropriate handling.",
+        "Personal or confidential information with stated appropriate handling and safeguards.",
+        "Sensitive personal or privileged information, or confidential data with explicitly inadequate handling."
+      ]
+    },
+    {
+      "id": "D2",
+      "label": "Security, vendor exposure, and data handling",
+      "guidance": "Consider access restrictions, external sharing, retention, vendor training, and the stated tool approval. Unknown vendor terms must stay unknown; do not look up or assume real vendor practices.",
+      "anchors": [
+        "Public or synthetic data in an isolated read-only workflow, with explicit access, sharing, and retention boundaries.",
+        "Named restricted users and stated suitable vendor handling, with no material integration privileges.",
+        "External processing or integrations with stated controls but meaningful residual exposure.",
+        "Explicitly unapproved sensitive-data processing, unrestricted sensitive access, or inadequate deletion or sharing controls."
+      ]
+    },
+    {
+      "id": "D3",
+      "label": "Autonomy and human oversight",
+      "guidance": "Distinguish drafting and recommendations from actual decisions or actions. Consider the human approval point and the ability to stop or reverse actions.",
+      "anchors": [
+        "Read-only synthesis or a synthetic demonstration; a human checks the result before any use.",
+        "Low-impact drafting with mandatory human review and no authority to act.",
+        "Bounded low-impact actions with monitoring, reversibility, and explicit limits.",
+        "Consequential decisions or actions, especially without prior human approval."
+      ]
+    },
+    {
+      "id": "D4",
+      "label": "Impact on people, operations, and safety",
+      "guidance": "Assess who could be affected by an error. Employment, legal obligations, physical safety, or material financial commitments require special care. Cite only this sample rubric, not invented laws.",
+      "anchors": [
+        "No operational consequence beyond exploration of public or synthetic information.",
+        "Reversible internal productivity use with limited consequences for errors.",
+        "Customer-facing or operational use with meaningful but bounded consequences.",
+        "Employment, rights, legal obligations, physical safety, or material financial consequences."
+      ]
+    },
+    {
+      "id": "D5",
+      "label": "Output reliability and intended audience",
+      "guidance": "Consider how errors will be detected and whether outputs are internal, external, factual, or consequential. Human review must be described, not assumed.",
+      "anchors": [
+        "Human-checked summaries grounded in public or synthetic source material, without consequential reliance.",
+        "Human-checked internal drafts with source checking and a clear owner.",
+        "External or operational outputs with review and validation but meaningful residual error risk.",
+        "Unverified outputs used for consequential decisions, represented as authoritative, or acted on without validation."
+      ]
+    },
+    {
+      "id": "D6",
+      "label": "Intellectual property and permitted use",
+      "guidance": "Check whether input use and the intended use of outputs are expressly permitted. Publicly available is not the same as freely licensed. Do not assume copyright status or contractual terms.",
+      "anchors": [
+        "Synthetic, owned, or expressly permitted inputs and outputs used within those permissions.",
+        "Expressly licensed third-party material used within stated license limits, with required attribution.",
+        "Commercial or external reuse with stated permissions but material residual licensing or ownership questions.",
+        "Explicitly unauthorized input use or output reuse outside stated permissions."
+      ]
+    }
+  ],
+  "blocking_rules": [
+    {
+      "id": "B1",
+      "label": "Sensitive data sent to an explicitly unsuitable vendor",
+      "rule": "Applies when confidential, personal, privileged, or proprietary non-public data will be sent to a tool explicitly stated to be unapproved for that data, or used for vendor training without permission. Public-only or synthetic-only data does not trigger this rule. For sensitive data with unknown approval or training terms, return unknown. This is an illustrative sandbox restriction."
+    },
+    {
+      "id": "B2",
+      "label": "Consequential action without prior human approval",
+      "rule": "Applies when AI will directly make or execute consequential decisions about employment, customer rights, legal obligations, physical safety, or material financial commitments without prior human approval. Human-reviewed drafts and recommendations do not trigger this rule. When autonomy or approval is unspecified, return unknown. This is an illustrative sandbox restriction."
+    }
+  ]
+}
