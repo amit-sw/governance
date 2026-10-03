@@ -1,10 +1,11 @@
 import hashlib
 import json
+import logging
 from copy import deepcopy
 from time import perf_counter
 
 import streamlit as st
-from openai import APIError
+from openai import APIConnectionError, APITimeoutError, AuthenticationError, PermissionDeniedError, RateLimitError
 
 import core
 import workflow
@@ -14,7 +15,10 @@ WELCOME_MESSAGE = "What would you like to use AI for? Describe the problem and t
 
 
 def initialize_session():
-    st.session_state.selected_model = workflow.load_settings()["model"]
+    settings = run_action(workflow.load_settings, "Your saved model setting could not be read. Choose a model in Settings to save it again.")
+    if settings is not None:
+        st.session_state.selected_model = settings["model"]
+    st.session_state.setdefault("selected_model", workflow.DEFAULT_MODEL)
     if "active_request" not in st.session_state:
         st.session_state.active_request = workflow.new_session()
     state = st.session_state.active_request
@@ -24,6 +28,10 @@ def initialize_session():
     state.setdefault("intake_seconds", None)
     state.setdefault("assessment_origin", "manual")
     state.setdefault("assessment_model", None)
+    if state.get("interface_version") != 2:
+        if state["error"]:
+            state["error"] = "The previous step did not complete. Retry when ready; your conversation is still available."
+        state["interface_version"] = 2
     return state
 
 
@@ -31,23 +39,47 @@ def selected_model():
     return st.session_state.selected_model
 
 
+def failure_message(error, fallback):
+    if isinstance(error, AuthenticationError):
+        return "The AI service could not accept the configured API key. Update it in Streamlit secrets, then retry."
+    if isinstance(error, PermissionDeniedError):
+        return "The configured API project cannot use this model. Choose another model in Settings, then retry."
+    if isinstance(error, RateLimitError):
+        return "The AI service is currently at its usage limit. Check your API quota or try again later."
+    if isinstance(error, APITimeoutError):
+        return "The AI service took too long to respond. Retry when ready."
+    if isinstance(error, APIConnectionError):
+        return "The AI service could not be reached. Retry when the connection is available."
+    return fallback
+
+
+def run_action(operation, message, state=None):
+    try:
+        return operation()
+    except Exception as error:
+        logging.getLogger(__name__).warning("Action did not complete: %s", type(error).__name__)
+        notice = failure_message(error, message)
+        if state is not None:
+            state["error"] = notice + " Your conversation and current request are still available in this session."
+        else:
+            st.warning(notice)
+        return None
+
+
 def run_ai(state, operation, label="Thinking…"):
     state["error"] = None
-    if not core.get_api_key():
-        state["error"] = "Add OPENAI_API_KEY to .streamlit/secrets.toml before continuing. Your chat remains in this session."
-        return None
-    try:
-        started = perf_counter()
+    started = perf_counter()
+
+    def call():
+        if not core.get_api_key():
+            state["error"] = "Add OPENAI_API_KEY to Streamlit secrets before continuing. Your conversation is still available."
+            return None
         with st.spinner(label, show_time=True):
-            result = operation()
-        st.caption(f"Completed in {perf_counter() - started:.1f} seconds.")
-        return result
-    except APIError as error:
-        state["error"] = f"OpenAI request failed: {error}. Your chat remains in this session. Retry when ready."
-        return None
-    except ValueError as error:
-        state["error"] = f"The model response could not be validated: {error} Your chat remains in this session. Retry when ready."
-        return None
+            return operation()
+
+    result = run_action(call, "The assistant could not complete this step. Retry when ready.", state)
+    st.caption(f"Time taken: {perf_counter() - started:.1f} seconds.")
+    return result
 
 
 def show_message(container, role, content):
@@ -60,6 +92,9 @@ def compare_precedents(state, precedents):
     state["comparison_failed"] = True
     report = state["report"]
     report["comparison_status"] = "Precedent comparison has not completed."
+    if precedents is None:
+        report["comparison_status"] = "Precedent files could not be read. This assessment remains available; retry comparison after the files are restored."
+        return
     matches = run_ai(state, lambda: workflow.compare_precedents(
         report["request"], precedents, report["configuration"], report["model"],
     ), "Thinking… comparing precedents")
@@ -126,6 +161,14 @@ def submit_message(state, message, configuration, precedents, chat):
 def request_dialog(state):
     st.caption("These are the facts extracted from the chat. Correct any fact by sending another message.")
     st.table([{"Field": label, "Provided facts": state["case"]["request"][key]} for key, label in core.FIELDS.items()])
+    if state["intake_failed"]:
+        st.info("The latest message has not been added to these facts yet. Retry intake to include it.")
+    with st.expander("Supporting messages"):
+        for field_id, sources in state["case"].get("request_sources", {}).items():
+            st.markdown(f"**{core.FIELDS[field_id]}**")
+            for source in sources:
+                st.caption(source["source_id"])
+                st.write(source["content"])
     if st.button("Close", key="close_request"):
         st.rerun()
 
@@ -143,37 +186,38 @@ def conversation_dialog(state):
 @st.dialog("Assessment", width="large", dismissible=True, on_dismiss="rerun")
 def assessment_dialog(state, configuration, precedents):
     pending = state.pop("pending_assessment", False)
-    retry = False
-    if not pending and state["assessment_failed"]:
-        retry = st.button("Retry assessment", key="modal_retry_assessment")
-    if pending or retry:
+    if pending:
         started = perf_counter()
         state["configuration"] = deepcopy(configuration)
         state["assessment_model"] = selected_model()
-        state["report"] = None
+        state["assessment_failed"] = True
         state["comparison_failed"] = False
         if state["intake_failed"]:
             result = run_ai(state, lambda: workflow.review_intake(state["case"], configuration, state["assessment_model"]), "Thinking… extracting the facts supplied so far")
             if result is None:
                 state["assessment_failed"] = True
                 state["assessment_seconds"] = perf_counter() - started
-                st.error(state["error"])
-                st.caption(f"Total assessment time: {state['assessment_seconds']:.1f} seconds.")
-                return
-            core.update_request(state["case"], result[0])
-            state["intake_failed"] = False
-        assess_current_request(state, precedents, manual=state["assessment_origin"] == "manual")
+            else:
+                core.update_request(state["case"], result[0])
+                state["intake_failed"] = False
+        if not state["intake_failed"]:
+            assess_current_request(state, precedents, manual=state["assessment_origin"] == "manual")
         state["assessment_seconds"] = perf_counter() - started
         if state["assessment_origin"] == "automatic":
             state["request_seconds"] = (state["intake_seconds"] or 0) + state["assessment_seconds"]
     if state["error"]:
-        st.error(state["error"])
+        st.info(state["error"])
     if state["assessment_seconds"] is not None:
         st.caption(f"Total assessment time: {state['assessment_seconds']:.1f} seconds.")
         if state["assessment_origin"] == "automatic":
             st.caption(f"Total chat request time: {state['request_seconds']:.1f} seconds.")
     if state["report"] is not None:
+        if state["assessment_failed"]:
+            st.info("The report below is from the previous completed assessment. The new assessment has not completed.")
         render_assessment(state["report"], configuration)
+    if state["assessment_failed"] and st.button("Retry assessment", key="modal_retry_assessment"):
+        state["pending_assessment"] = True
+        st.rerun(scope="fragment")
     if state["comparison_failed"] and st.button("Retry precedent comparison", key="modal_retry_comparison"):
         compare_precedents(state, precedents)
         st.rerun(scope="fragment")
@@ -246,7 +290,7 @@ def render_assessment(report, configuration):
             st.markdown(match["precedent"]["content"])
     with st.expander("Facts, rubric, and prompts used for this assessment"):
         st.caption(f"Run: {report['created_at']} · Model: {report['model']}")
-        st.json({"request": report["request"], "configuration": report["configuration"]})
+        st.json({"request": report["request"], "supporting_messages": report.get("request_sources", {}), "configuration": report["configuration"]})
 
 
 def render_intake(state, configuration, precedents):
@@ -281,8 +325,15 @@ def render_intake(state, configuration, precedents):
             show_message(chat, "assistant", WELCOME_MESSAGE)
         if state["error"] and state["intake_failed"]:
             with chat:
-                st.error(state["error"])
-                st.caption("Send another message to retry intake, or use the assessment icon above.")
+                st.info(state["error"])
+        if state["intake_failed"]:
+            with chat:
+                if st.button("Retry last message", key="retry_intake"):
+                    started = perf_counter()
+                    continue_intake(state, configuration, precedents, chat)
+                    state["request_seconds"] = perf_counter() - started
+                    state["intake_seconds"] = state["request_seconds"]
+                    st.rerun()
         if state["request_seconds"] is not None:
             st.caption(f"Total time for the last chat request: {state['request_seconds']:.1f} seconds.")
         message = st.chat_input("Describe your intended use", key=f"intake_chat_{state['case']['id']}")
@@ -323,20 +374,25 @@ def render_rubrics(configuration):
         rubric["note"] = st.text_area("Rubric note", rubric["note"], key=f"note_{configuration_key}")
         for dimension in rubric["dimensions"]:
             with st.expander(f"{dimension['id']} · {dimension['label']}"):
-                prefix = f"{configuration_key}_{dimension['id']}"
+                prefix = f"{configuration_key}_dimension_{dimension['id']}"
                 dimension["label"] = st.text_input("Dimension label", dimension["label"], key=f"{prefix}_label")
                 dimension["guidance"] = st.text_area("Guidance", dimension["guidance"], key=f"{prefix}_guidance")
                 for score, anchor in enumerate(dimension["anchors"]):
                     dimension["anchors"][score] = st.text_area(f"Score {score} anchor", anchor, key=f"{prefix}_{score}")
         for rule in rubric["blocking_rules"]:
             with st.expander(f"{rule['id']} · {rule['label']}"):
-                prefix = f"{configuration_key}_{rule['id']}"
+                prefix = f"{configuration_key}_rule_{rule['id']}"
                 rule["label"] = st.text_input("Rule label", rule["label"], key=f"{prefix}_label")
                 rule["rule"] = st.text_area("Blocking rule", rule["rule"], height=160, key=f"{prefix}_rule")
         if st.form_submit_button("Save rubric", type="primary"):
-            core.validate_configuration({"rubric": rubric, "prompts": configuration["prompts"]})
-            core.write_json(workflow.RUBRIC_PATH, rubric)
-            st.rerun()
+            if run_action(lambda: save_rubric(rubric, configuration), "The rubric was not saved. Fill in its name, version, guidance, labels, and all four anchors, then try again. If these are complete, check that the app can write its configuration files."):
+                st.rerun()
+
+
+def save_rubric(rubric, configuration):
+    workflow.validate_configuration({"rubric": rubric, "prompts": configuration["prompts"]})
+    core.write_json(workflow.RUBRIC_PATH, rubric)
+    return True
 
 
 def render_prompts(configuration):
@@ -349,11 +405,21 @@ def render_prompts(configuration):
             with st.form(f"prompt_{name}"):
                 edited = st.text_area("Instructions", prompt, height=380, key=f"{name}_{prompt_key}")
                 if st.form_submit_button(f"Save {name} prompt", type="primary"):
-                    updated = deepcopy(configuration)
-                    updated["prompts"][name] = edited
-                    core.validate_configuration(updated)
-                    (workflow.PROMPTS_DIR / f"{name}.md").write_text(edited.strip() + "\n", encoding="utf-8")
-                    st.rerun()
+                    if run_action(lambda: save_prompt(name, edited, configuration), "The prompt was not saved. Enter nonempty instructions, then try again. If instructions are present, check that the app can write its prompt files."):
+                        st.rerun()
+
+
+def save_prompt(name, edited, configuration):
+    updated = deepcopy(configuration)
+    updated["prompts"][name] = edited
+    workflow.validate_configuration(updated)
+    (workflow.PROMPTS_DIR / f"{name}.md").write_text(edited.strip() + "\n", encoding="utf-8")
+    return True
+
+
+def save_settings(model):
+    core.write_json(workflow.SETTINGS_PATH, {"model": model})
+    return True
 
 
 def render_settings():
@@ -362,26 +428,58 @@ def render_settings():
     with st.form("model_settings"):
         model = st.selectbox("Model", list(workflow.MODELS), index=list(workflow.MODELS).index(selected_model()), format_func=lambda value: workflow.MODELS[value])
         if st.form_submit_button("Save settings", type="primary"):
-            core.write_json(workflow.SETTINGS_PATH, {"model": model})
-            st.session_state.selected_model = model
-            st.success(f"Settings saved. New AI requests will use {workflow.MODELS[model]}.")
+            if run_action(lambda: save_settings(model), "The model setting was not saved. Your current model is still selected. Check that the app can write its settings file, then try again."):
+                st.session_state.selected_model = model
+                st.success(f"Settings saved. New AI requests will use {workflow.MODELS[model]}.")
     st.caption(f"Current model: {workflow.MODELS[selected_model()]}. Existing assessments retain the model used for their run.")
+
+
+def repair_configuration():
+    st.subheader("Review configuration")
+    st.write("The rubric or prompts need attention before the assistant can continue. Your conversation is preserved. Correct the files below and save them together.")
+    rubric_text = run_action(lambda: workflow.RUBRIC_PATH.read_text(encoding="utf-8"), "The rubric file could not be read.") or ""
+    prompts = {
+        name: run_action(lambda name=name: (workflow.PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8"), f"The {name} prompt could not be read.") or ""
+        for name in core.PROMPT_NAMES
+    }
+    with st.form("configuration_repair"):
+        rubric_text = st.text_area("Rubric JSON", rubric_text, height=300)
+        for name in prompts:
+            prompts[name] = st.text_area(f"{name.title()} instructions", prompts[name], height=180)
+        if st.form_submit_button("Save configuration", type="primary"):
+            if run_action(lambda: save_configuration(rubric_text, prompts), "Configuration was not saved. Check the JSON structure, unique rubric IDs, four nonempty anchors per dimension, and nonempty prompts. If these are complete, check file write access."):
+                st.rerun()
+    if st.button("Copy conversation", key="repair_conversation"):
+        conversation_dialog(st.session_state.active_request)
+
+
+def save_configuration(rubric_text, prompts):
+    configuration = {"rubric": json.loads(rubric_text), "prompts": prompts}
+    workflow.validate_configuration(configuration)
+    core.write_json(workflow.RUBRIC_PATH, configuration["rubric"])
+    workflow.PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+    for name, prompt in prompts.items():
+        (workflow.PROMPTS_DIR / f"{name}.md").write_text(prompt.strip() + "\n", encoding="utf-8")
+    return True
 
 
 def main():
     st.set_page_config(page_title="AI Governance Assistant", page_icon="◈", layout="wide")
-    configuration = workflow.load_configuration()
-    precedents = workflow.load_precedents()
     state = initialize_session()
+    configuration = run_action(workflow.load_configuration, "The configuration could not be loaded. Review the rubric and prompts below.")
+    if configuration is None:
+        repair_configuration()
+        return
+    precedents = run_action(workflow.load_precedents, "Precedents could not be read. Assessment is still available; comparisons will wait until the Markdown files can be read.")
     pages = [
         st.Page(lambda: render_intake(state, configuration, precedents), title="Guided Intake", url_path="intake", default=True),
-        st.Page(lambda: render_precedents(precedents), title="History & Precedents", url_path="precedents"),
+        st.Page(lambda: render_precedents(precedents or []), title="History & Precedents", url_path="precedents"),
         st.Page(lambda: render_rubrics(configuration), title="Rubrics", url_path="rubrics"),
         st.Page(lambda: render_prompts(configuration), title="Prompts", url_path="prompts"),
         st.Page(render_settings, title="Settings", url_path="settings"),
     ]
     page = st.navigation(pages, position="top")
-    page.run()
+    run_action(page.run, "This page could not finish displaying. Your conversation is preserved. Reopen the page, or use Conversation so far to copy your messages.")
 
 
 main()

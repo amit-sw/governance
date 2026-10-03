@@ -62,7 +62,7 @@ The highest known dimension score determines risk. Explicit blockers override th
 | File or directory | Purpose |
 |---|---|
 | `app.py` | Streamlit layout, chat actions, assessment progress, and configuration editors |
-| `workflow.py` | Streamlit intake readiness, prompt loading, and Markdown precedent comparison |
+| `workflow.py` | Source-backed intake, rubric-shaped assessment, conservative findings, and Markdown precedent comparison |
 | `core.py` | Existing SDK calls, evidence validation, and deterministic assessment rules; unchanged in this UI revision |
 | `data/settings.json` | Saved model selection; no requests or credentials |
 | `rubric.json` | Editable dimensions, scoring anchors, and blocking rules |
@@ -83,9 +83,15 @@ Calls use the [Responses API with structured outputs](https://developers.openai.
 
 AI calls start only when a chat message is submitted, **Assess input so far** is selected, or a visible retry button is selected. Every model call shows a thinking spinner with elapsed time. The completed chat request shows its total time, including any automatic assessment and comparison. A successful intake review can trigger assessment and comparison in that same action. Ordinary widget reruns and page navigation do not repeat AI operations.
 
-Python checks score ranges, known reference IDs, quoted evidence, and complete rubric coverage. Readiness also checks missing material fields independently of the model. These checks cannot establish whether every interpretation is factually correct; human review of the reasoning is still needed.
+Intake selects supporting source IDs from user messages or existing request fields. The source IDs are constrained by the schema; Python attaches their actual text rather than asking the model to reproduce exact quotations. **Show current request** includes these supporting messages. Intake distinguishes known facts from unknown or partially answered fields. Updates without supporting sources are left unapplied and become clarification requests, while supported updates remain usable. Numbering is supplied by the app.
 
-One narrow OpenAI API-error boundary preserves the in-session request and displays a retry action. A failed assessment produces no recommendation. If only the precedent comparison fails, the valid assessment stays visible and comparison can be retried independently. Structured-output validation and local file errors use ordinary Python/Streamlit errors. There are no fabricated assessments or automatic recovery loops.
+Assessment uses a schema with a required slot for each active rubric dimension and blocker. Python supplies rubric IDs and copies cited request values into the report. A score or blocker without usable known evidence remains Unknown instead of failing the whole report. Unsupported safeguard or conflict claims become clarification questions. Missing fields and unresolved intake contradictions independently prevent approval. Precedent IDs are constrained to the supplied collection and duplicate matches are consolidated.
+
+One shared UI action boundary covers AI calls, configuration loading, and file saves. Authentication, quota, connection, and timeout failures have actionable messages. Incomplete, refused, or unusable model responses preserve the conversation and offer an explicit retry; they never generate a fabricated recommendation. **Retry last message** reviews the existing conversation without asking users to retype it. Assessment and comparison can be retried separately. A valid earlier report remains visibly identified if a new assessment fails. Technical exceptions and provider response bodies are not displayed to users; logs record only the exception class.
+
+Invalid rubric or prompt files open a configuration repair form rather than a traceback. Invalid edits are not saved, failed writes retain the submitted editor contents, and a configuration problem does not clear the conversation. Unreadable precedent files leave assessment available while comparison remains pending. There are no automatic recovery or retry loops.
+
+These controls prevent quotation mismatches, invalid identifiers, and missing rubric coverage from breaking the normal workflow. They cannot establish whether every model interpretation is factually correct; human review of the cited facts and reasoning is still needed. The design follows the [OpenAI structured-output guidance](https://developers.openai.com/api/docs/guides/structured-outputs), including handling incomplete or refused responses separately from successful assessments.
 
 ## Validation status
 
